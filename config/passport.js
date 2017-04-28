@@ -14,31 +14,27 @@ const OAuth2Strategy = require('passport-oauth').OAuth2Strategy;
 const User = require('../models/User');
 
 passport.serializeUser((user, done) => {
-  done(null, user.id);
+  done(null, user._id);
 });
 
 passport.deserializeUser((id, done) => {
-  User.findById(id, (err, user) => {
-    done(err, user);
-  });
+  done(null, User.findById(id));
 });
 
 /**
  * Sign in using Email and Password.
  */
 passport.use(new LocalStrategy({ usernameField: 'email' }, (email, password, done) => {
-  User.findOne({ email: email.toLowerCase() }, (err, user) => {
+  const user = User.findOne({ email: email.toLowerCase() });
+  if (!user) {
+    return done(null, false, { msg: `Email ${email} not found.` });
+  }
+  user.comparePassword(password, (err, isMatch) => {
     if (err) { return done(err); }
-    if (!user) {
-      return done(null, false, { msg: `Email ${email} not found.` });
+    if (isMatch) {
+      return done(null, user);
     }
-    user.comparePassword(password, (err, isMatch) => {
-      if (err) { return done(err); }
-      if (isMatch) {
-        return done(null, user);
-      }
-      return done(null, false, { msg: 'Invalid email or password.' });
-    });
+    return done(null, false, { msg: 'Invalid email or password.' });
   });
 }));
 
@@ -74,7 +70,7 @@ passport.use(new FacebookStrategy({
         req.flash('errors', { msg: 'There is already a Facebook account that belongs to you. Sign in with that account or delete it, then link it with your current account.' });
         done(err);
       } else {
-        User.findById(req.user.id, (err, user) => {
+        User.findById(req.user._id, (err, user) => {
           if (err) { return done(err); }
           user.facebook = profile.id;
           user.tokens.push({ kind: 'facebook', accessToken });
@@ -132,7 +128,7 @@ passport.use(new GitHubStrategy({
         req.flash('errors', { msg: 'There is already a GitHub account that belongs to you. Sign in with that account or delete it, then link it with your current account.' });
         done(err);
       } else {
-        User.findById(req.user.id, (err, user) => {
+        User.findById(req.user._id, (err, user) => {
           if (err) { return done(err); }
           user.github = profile.id;
           user.tokens.push({ kind: 'github', accessToken });
@@ -191,7 +187,7 @@ passport.use(new TwitterStrategy({
         req.flash('errors', { msg: 'There is already a Twitter account that belongs to you. Sign in with that account or delete it, then link it with your current account.' });
         done(err);
       } else {
-        User.findById(req.user.id, (err, user) => {
+        User.findById(req.user._id, (err, user) => {
           if (err) { return done(err); }
           user.twitter = profile.id;
           user.tokens.push({ kind: 'twitter', accessToken, tokenSecret });
@@ -245,7 +241,7 @@ passport.use(new GoogleStrategy({
         req.flash('errors', { msg: 'There is already a Google account that belongs to you. Sign in with that account or delete it, then link it with your current account.' });
         done(err);
       } else {
-        User.findById(req.user.id, (err, user) => {
+        User.findById(req.user._id, (err, user) => {
           if (err) { return done(err); }
           user.google = profile.id;
           user.tokens.push({ kind: 'google', accessToken });
@@ -304,7 +300,7 @@ passport.use(new LinkedInStrategy({
         req.flash('errors', { msg: 'There is already a LinkedIn account that belongs to you. Sign in with that account or delete it, then link it with your current account.' });
         done(err);
       } else {
-        User.findById(req.user.id, (err, user) => {
+        User.findById(req.user._id, (err, user) => {
           if (err) { return done(err); }
           user.linkedin = profile.id;
           user.tokens.push({ kind: 'linkedin', accessToken });
@@ -365,7 +361,7 @@ passport.use(new InstagramStrategy({
         req.flash('errors', { msg: 'There is already an Instagram account that belongs to you. Sign in with that account or delete it, then link it with your current account.' });
         done(err);
       } else {
-        User.findById(req.user.id, (err, user) => {
+        User.findById(req.user._id, (err, user) => {
           if (err) { return done(err); }
           user.instagram = profile.id;
           user.tokens.push({ kind: 'instagram', accessToken });

@@ -3,6 +3,7 @@ const crypto = bluebird.promisifyAll(require('crypto'));
 const nodemailer = require('nodemailer');
 const passport = require('passport');
 const User = require('../models/User');
+const hashPassword = require('../util/userutil').hashPassword;
 
 /**
  * GET /login
@@ -86,23 +87,22 @@ exports.postSignup = (req, res, next) => {
     return res.redirect('/signup');
   }
 
-  const user = new User({
-    email: req.body.email,
-    password: req.body.password
-  });
+  const existingUser = User.findOne({ email: req.body.email });
 
-  User.findOne({ email: req.body.email }, (err, existingUser) => {
+  if (existingUser) {
+    req.flash('errors', { msg: 'Account with that email address already exists.' });
+    return res.redirect('/signup');
+  }
+
+  hashPassword(req.body.password, (err, hashedPass) => {
     if (err) { return next(err); }
-    if (existingUser) {
-      req.flash('errors', { msg: 'Account with that email address already exists.' });
-      return res.redirect('/signup');
-    }
-    user.save((err) => {
+    User.insertOne({
+      email: req.body.email,
+      password: hashedPass
+    }, (err, user) => {
       if (err) { return next(err); }
       req.logIn(user, (err) => {
-        if (err) {
-          return next(err);
-        }
+        if (err) { return next(err); }
         res.redirect('/');
       });
     });
@@ -134,24 +134,23 @@ exports.postUpdateProfile = (req, res, next) => {
     return res.redirect('/account');
   }
 
-  User.findById(req.user.id, (err, user) => {
-    if (err) { return next(err); }
-    user.email = req.body.email || '';
-    user.profile.name = req.body.name || '';
-    user.profile.gender = req.body.gender || '';
-    user.profile.location = req.body.location || '';
-    user.profile.website = req.body.website || '';
-    user.save((err) => {
-      if (err) {
-        if (err.code === 11000) {
-          req.flash('errors', { msg: 'The email address you have entered is already associated with an account.' });
-          return res.redirect('/account');
-        }
-        return next(err);
+  const user = User.findById(req.user._id);
+
+  user.email = req.body.email || '';
+  user.profile.name = req.body.name || '';
+  user.profile.gender = req.body.gender || '';
+  user.profile.location = req.body.location || '';
+  user.profile.website = req.body.website || '';
+  user.save((err) => {
+    if (err) {
+      if (err.code === 11000) {
+        req.flash('errors', { msg: 'The email address you have entered is already associated with an account.' });
+        return res.redirect('/account');
       }
-      req.flash('success', { msg: 'Profile information has been updated.' });
-      res.redirect('/account');
-    });
+      return next(err);
+    }
+    req.flash('success', { msg: 'Profile information has been updated.' });
+    res.redirect('/account');
   });
 };
 
@@ -170,9 +169,11 @@ exports.postUpdatePassword = (req, res, next) => {
     return res.redirect('/account');
   }
 
-  User.findById(req.user.id, (err, user) => {
+  const user = User.findById(req.user._id);
+
+  hashPassword(req.body.password, (err, hashedPass) => {
     if (err) { return next(err); }
-    user.password = req.body.password;
+    user.password = hashedPass;
     user.save((err) => {
       if (err) { return next(err); }
       req.flash('success', { msg: 'Password has been changed.' });
@@ -186,7 +187,7 @@ exports.postUpdatePassword = (req, res, next) => {
  * Delete user account.
  */
 exports.postDeleteAccount = (req, res, next) => {
-  User.remove({ _id: req.user.id }, (err) => {
+  User.remove({ _id: req.user._id }, (err) => {
     if (err) { return next(err); }
     req.logout();
     req.flash('info', { msg: 'Your account has been deleted.' });
@@ -200,15 +201,14 @@ exports.postDeleteAccount = (req, res, next) => {
  */
 exports.getOauthUnlink = (req, res, next) => {
   const provider = req.params.provider;
-  User.findById(req.user.id, (err, user) => {
+
+  const user = User.findById(req.user._id);
+  user[provider] = undefined;
+  user.tokens = user.tokens.filter(token => token.kind !== provider);
+  user.save((err) => {
     if (err) { return next(err); }
-    user[provider] = undefined;
-    user.tokens = user.tokens.filter(token => token.kind !== provider);
-    user.save((err) => {
-      if (err) { return next(err); }
-      req.flash('info', { msg: `${provider} account has been unlinked.` });
-      res.redirect('/account');
-    });
+    req.flash('info', { msg: `${provider} account has been unlinked.` });
+    res.redirect('/account');
   });
 };
 
@@ -287,7 +287,7 @@ exports.postReset = (req, res, next) => {
     };
     return transporter.sendMail(mailOptions)
       .then(() => {
-        req.flash('success', { msg: 'Success! Your password has been changed.' });    
+        req.flash('success', { msg: 'Success! Your password has been changed.' });
       });
   };
 
