@@ -1,6 +1,6 @@
 const bcrypt = require('bcrypt-nodejs');
 const crypto = require('crypto');
-const database = require('../util/database');
+const { database, subscribeToEvents } = require('../util/database');
 
 const userSchema = new database.Schema({
   email: { type: String, unique: true },
@@ -50,5 +50,7 @@ userSchema.methods.gravatar = function gravatar(size) {
 };
 
 const User = database.model('User', userSchema);
+
+subscribeToEvents(User);
 
 module.exports = User;
